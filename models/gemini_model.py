@@ -1,4 +1,4 @@
-from google import genai
+import google.generativeai as genai
 import asyncio
 from models.ai_model import AIModel
 
