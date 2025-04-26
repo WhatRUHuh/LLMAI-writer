@@ -32,8 +32,14 @@ class OutlineTab(QWidget):
         # 获取提示词管理器
         self.prompt_manager = self.main_window.prompt_manager
 
+        # 获取配置管理器
+        self.config_manager = self.main_window.config_manager
+
         # 初始化UI
         self._init_ui()
+
+        # 加载保存的输入值
+        self._load_saved_inputs()
 
     def _init_ui(self):
         """初始化UI"""
@@ -55,6 +61,8 @@ class OutlineTab(QWidget):
         self.model_combo = QComboBox()
         # 只添加标准模型，不显示具体的自定义模型
         self.model_combo.addItems(["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"]) # 直接添加到硬编码列表
+        # 添加模型选择变更事件
+        self.model_combo.currentIndexChanged.connect(lambda: self._save_input_value("selected_model", self.model_combo.currentText()))
 
         model_layout.addRow("AI模型:", self.model_combo)
 
@@ -72,6 +80,8 @@ class OutlineTab(QWidget):
             self.template_combo.addItem(template.name)
 
         self.template_combo.currentIndexChanged.connect(self._on_template_selected)
+        # 添加模板选择变更事件，保存选择的模板
+        self.template_combo.currentIndexChanged.connect(lambda: self._save_input_value("selected_template", self.template_combo.currentText()))
         template_layout.addWidget(self.template_combo)
 
         # 添加新建、编辑和保存模板按钮
@@ -100,28 +110,33 @@ class OutlineTab(QWidget):
 
         # 添加小说标题输入框
         self.title_edit = QLineEdit()
+        self.title_edit.textChanged.connect(lambda: self._save_input_value("title", self.title_edit.text()))
         info_layout.addRow("小说标题:", self.title_edit)
 
         # 添加小说类型输入框
         self.genre_edit = QLineEdit()
+        self.genre_edit.textChanged.connect(lambda: self._save_input_value("genre", self.genre_edit.text()))
         info_layout.addRow("小说类型:", self.genre_edit)
 
         # 添加小说主题输入框 - 使用文本编辑框并添加滚动条
         self.theme_edit = QTextEdit()
         self.theme_edit.setMinimumHeight(60)  # 设置最小高度
         self.theme_edit.setMaximumHeight(100)  # 设置最大高度
+        self.theme_edit.textChanged.connect(lambda: self._save_input_value("theme", self.theme_edit.toPlainText()))
         info_layout.addRow("小说主题:", self.theme_edit)
 
         # 添加小说风格输入框 - 使用文本编辑框并添加滚动条
         self.style_edit = QTextEdit()
         self.style_edit.setMinimumHeight(60)  # 设置最小高度
         self.style_edit.setMaximumHeight(100)  # 设置最大高度
+        self.style_edit.textChanged.connect(lambda: self._save_input_value("style", self.style_edit.toPlainText()))
         info_layout.addRow("小说风格:", self.style_edit)
 
         # 添加小说简介输入框 - 使用文本编辑框并添加滚动条
         self.synopsis_edit = QTextEdit()
         self.synopsis_edit.setMinimumHeight(80)  # 设置最小高度
         self.synopsis_edit.setMaximumHeight(120)  # 设置最大高度
+        self.synopsis_edit.textChanged.connect(lambda: self._save_input_value("synopsis", self.synopsis_edit.toPlainText()))
         info_layout.addRow("小说简介:", self.synopsis_edit)
 
         # 添加卷数设置
@@ -129,6 +144,7 @@ class OutlineTab(QWidget):
         self.volume_count_spin.setRange(1, 999)
         self.volume_count_spin.setValue(3)
         self.volume_count_spin.setSuffix(" 卷")
+        self.volume_count_spin.valueChanged.connect(lambda: self._save_input_value("volume_count", self.volume_count_spin.value()))
         info_layout.addRow("卷数:", self.volume_count_spin)
 
         # 添加每卷章节数设置
@@ -136,6 +152,7 @@ class OutlineTab(QWidget):
         self.chapters_per_volume_spin.setRange(1, 999)
         self.chapters_per_volume_spin.setValue(10)
         self.chapters_per_volume_spin.setSuffix(" 章/卷")
+        self.chapters_per_volume_spin.valueChanged.connect(lambda: self._save_input_value("chapters_per_volume", self.chapters_per_volume_spin.value()))
         info_layout.addRow("每卷章节数:", self.chapters_per_volume_spin)
 
         # 添加每章字数设置
@@ -144,6 +161,7 @@ class OutlineTab(QWidget):
         self.words_per_chapter_spin.setValue(3000)
         self.words_per_chapter_spin.setSingleStep(500)
         self.words_per_chapter_spin.setSuffix(" 字/章")
+        self.words_per_chapter_spin.valueChanged.connect(lambda: self._save_input_value("words_per_chapter", self.words_per_chapter_spin.value()))
         info_layout.addRow("每章字数:", self.words_per_chapter_spin)
 
         # 创建角色设置组
@@ -165,6 +183,7 @@ class OutlineTab(QWidget):
         self.new_character_count_spin.setRange(0, 100)
         self.new_character_count_spin.setValue(5)
         self.new_character_count_spin.setSuffix(" 个")
+        self.new_character_count_spin.valueChanged.connect(lambda: self._save_input_value("new_character_count", self.new_character_count_spin.value()))
         character_layout.addRow("新生成角色数量:", self.new_character_count_spin)
 
         # 添加选择当前范围大纲出现角色的按钮
@@ -229,6 +248,7 @@ class OutlineTab(QWidget):
         self.start_volume_spin = QSpinBox()
         self.start_volume_spin.setRange(1, 999)
         self.start_volume_spin.setValue(1)
+        self.start_volume_spin.valueChanged.connect(lambda: self._save_input_value("start_volume", self.start_volume_spin.value()))
         start_volume_layout.addWidget(self.start_volume_spin)
         range_layout.addLayout(start_volume_layout)
 
@@ -238,6 +258,7 @@ class OutlineTab(QWidget):
         self.start_chapter_spin = QSpinBox()
         self.start_chapter_spin.setRange(1, 999)
         self.start_chapter_spin.setValue(1)
+        self.start_chapter_spin.valueChanged.connect(lambda: self._save_input_value("start_chapter", self.start_chapter_spin.value()))
         start_chapter_layout.addWidget(self.start_chapter_spin)
         range_layout.addLayout(start_chapter_layout)
 
@@ -247,6 +268,7 @@ class OutlineTab(QWidget):
         self.end_volume_spin = QSpinBox()
         self.end_volume_spin.setRange(1, 999)
         self.end_volume_spin.setValue(1)
+        self.end_volume_spin.valueChanged.connect(lambda: self._save_input_value("end_volume", self.end_volume_spin.value()))
         end_volume_layout.addWidget(self.end_volume_spin)
         range_layout.addLayout(end_volume_layout)
 
@@ -256,6 +278,7 @@ class OutlineTab(QWidget):
         self.end_chapter_spin = QSpinBox()
         self.end_chapter_spin.setRange(1, 999)
         self.end_chapter_spin.setValue(10)
+        self.end_chapter_spin.valueChanged.connect(lambda: self._save_input_value("end_chapter", self.end_chapter_spin.value()))
         end_chapter_layout.addWidget(self.end_chapter_spin)
         range_layout.addLayout(end_chapter_layout)
 
@@ -1022,3 +1045,93 @@ class OutlineTab(QWidget):
                 QMessageBox.information(self, "删除成功", f"模板 '{template_name}' 已删除")
             else:
                 QMessageBox.warning(self, "删除失败", f"模板 '{template_name}' 删除失败")
+
+    def _save_input_value(self, key, value):
+        """保存输入值到配置
+
+        Args:
+            key: 配置键名
+            value: 配置值
+        """
+        try:
+            # 使用配置管理器的方法保存值
+            self.config_manager.set_outline_input(key, value)
+        except Exception as e:
+            print(f"保存输入值时出错: {e}")
+
+    def _load_saved_inputs(self):
+        """从配置加载保存的输入值"""
+        try:
+            # 加载模型选择
+            selected_model = self.config_manager.get_outline_input("selected_model")
+            if selected_model:
+                # 查找模型在下拉框中的索引
+                index = self.model_combo.findText(selected_model)
+                if index >= 0:
+                    self.model_combo.setCurrentIndex(index)
+
+            # 加载提示词模板选择
+            selected_template = self.config_manager.get_outline_input("selected_template")
+            if selected_template and selected_template != "选择提示词模板":
+                # 查找模板在下拉框中的索引
+                index = self.template_combo.findText(selected_template)
+                if index >= 0:
+                    self.template_combo.setCurrentIndex(index)
+
+            # 加载文本输入框的值
+            title = self.config_manager.get_outline_input("title")
+            if title:
+                self.title_edit.setText(title)
+
+            genre = self.config_manager.get_outline_input("genre")
+            if genre:
+                self.genre_edit.setText(genre)
+
+            theme = self.config_manager.get_outline_input("theme")
+            if theme:
+                self.theme_edit.setPlainText(theme)
+
+            style = self.config_manager.get_outline_input("style")
+            if style:
+                self.style_edit.setPlainText(style)
+
+            synopsis = self.config_manager.get_outline_input("synopsis")
+            if synopsis:
+                self.synopsis_edit.setPlainText(synopsis)
+
+            # 加载数值输入框的值
+            volume_count = self.config_manager.get_outline_input("volume_count")
+            if volume_count:
+                self.volume_count_spin.setValue(int(volume_count))
+
+            chapters_per_volume = self.config_manager.get_outline_input("chapters_per_volume")
+            if chapters_per_volume:
+                self.chapters_per_volume_spin.setValue(int(chapters_per_volume))
+
+            words_per_chapter = self.config_manager.get_outline_input("words_per_chapter")
+            if words_per_chapter:
+                self.words_per_chapter_spin.setValue(int(words_per_chapter))
+
+            new_character_count = self.config_manager.get_outline_input("new_character_count")
+            if new_character_count:
+                self.new_character_count_spin.setValue(int(new_character_count))
+
+            # 加载生成范围的值
+            start_volume = self.config_manager.get_outline_input("start_volume")
+            if start_volume:
+                self.start_volume_spin.setValue(int(start_volume))
+
+            start_chapter = self.config_manager.get_outline_input("start_chapter")
+            if start_chapter:
+                self.start_chapter_spin.setValue(int(start_chapter))
+
+            end_volume = self.config_manager.get_outline_input("end_volume")
+            if end_volume:
+                self.end_volume_spin.setValue(int(end_volume))
+
+            end_chapter = self.config_manager.get_outline_input("end_chapter")
+            if end_chapter:
+                self.end_chapter_spin.setValue(int(end_chapter))
+
+        except Exception as e:
+            print(f"加载保存的输入值时出错: {e}")

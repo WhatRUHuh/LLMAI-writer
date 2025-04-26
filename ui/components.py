@@ -60,7 +60,28 @@ class AIGenerateDialog(QDialog):
         self.result_text = ""
         self.generation_thread = None
         self.models = models or ["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"] # 保持模型列表更新
-        self.default_model = default_model if default_model in self.models else self.models[0]
+
+        # 获取配置管理器
+        self.config_manager = None
+        try:
+            if hasattr(parent, 'config_manager'):
+                self.config_manager = parent.config_manager
+            elif hasattr(parent, 'main_window') and hasattr(parent.main_window, 'config_manager'):
+                self.config_manager = parent.main_window.config_manager
+        except:
+            pass
+
+        # 从配置中加载上次使用的模型
+        saved_model = None
+        if self.config_manager:
+            saved_model = self.config_manager.get_config("AI_DIALOG", "last_used_model", None)
+
+        # 确定默认模型：优先使用保存的模型，其次使用传入的默认模型，最后使用模型列表的第一个
+        if saved_model and saved_model in self.models:
+            self.default_model = saved_model
+        else:
+            self.default_model = default_model if default_model in self.models else self.models[0]
+
         self.outline_info = outline_info or {}
         self.context_info = context_info or {}
         # 保存新参数
@@ -357,6 +378,8 @@ class AIGenerateDialog(QDialog):
         index = self.model_combo.findText(self.default_model)
         if index >= 0:
             self.model_combo.setCurrentIndex(index)
+        # 添加模型选择变更事件，保存选择的模型
+        self.model_combo.currentIndexChanged.connect(self._save_selected_model)
         model_layout.addWidget(self.model_combo)
 
         # 温度设置已移除
@@ -686,6 +709,18 @@ class AIGenerateDialog(QDialog):
                 QMessageBox.information(self, "删除成功", f"模板 '{template_name}' 已删除")
             else:
                 QMessageBox.warning(self, "删除失败", f"模板 '{template_name}' 删除失败")
+
+    def _save_selected_model(self):
+        """保存用户选择的模型"""
+        if self.config_manager:
+            selected_model = self.model_combo.currentText()
+            # 确保 AI_DIALOG 部分存在
+            if "AI_DIALOG" not in self.config_manager.config:
+                self.config_manager.config["AI_DIALOG"] = {}
+            # 保存选择的模型
+            self.config_manager.config["AI_DIALOG"]["last_used_model"] = selected_model
+            # 保存配置
+            self.config_manager.save_config()
 
     def _copy_result(self):
         """复制结果到剪贴板"""

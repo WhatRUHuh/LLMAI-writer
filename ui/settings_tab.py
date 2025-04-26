@@ -220,7 +220,7 @@ class SettingsTab(QWidget):
         # 加载代理设置
         if "PROXY" in config:
             proxy_config = config["PROXY"]
-            self.proxy_enabled.setChecked(proxy_config.getboolean("enabled", True))
+            self.proxy_enabled.setChecked(proxy_config.getboolean("enabled", False))
             self.proxy_host.setText(proxy_config.get("host", "127.0.0.1"))
             self.proxy_port.setValue(proxy_config.getint("port", 10808))
 

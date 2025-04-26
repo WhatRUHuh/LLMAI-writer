@@ -16,7 +16,7 @@ class ConfigManager:
     def _create_default_config(self):
         """创建默认配置文件"""
         self.config['PROXY'] = {
-            'enabled': 'true',
+            'enabled': 'false',
             'host': '127.0.0.1',
             'port': '10808'
         }
@@ -57,6 +57,16 @@ class ConfigManager:
         self.config['OLLAMA'] = {
             # 不需要enabled设置，始终启用
             'api_url': 'http://localhost:11434/api/chat'
+        }
+
+        # 添加大纲输入记忆配置部分
+        self.config['OUTLINE_INPUTS'] = {
+            # 默认为空，会在用户输入时自动保存
+        }
+
+        # 添加AI对话框记忆配置部分
+        self.config['AI_DIALOG'] = {
+            # 默认为空，会在用户选择模型时自动保存
         }
 
         with open(self.config_path, 'w', encoding='utf-8') as f:
@@ -258,6 +268,34 @@ class ConfigManager:
                 return model
 
         return None
+
+    def get_outline_input(self, key, default=None):
+        """获取大纲输入值
+
+        Args:
+            key: 输入项键名
+            default: 默认值
+
+        Returns:
+            输入值，如果不存在返回默认值
+        """
+        if 'OUTLINE_INPUTS' not in self.config:
+            return default
+
+        return self.config['OUTLINE_INPUTS'].get(key, default)
+
+    def set_outline_input(self, key, value):
+        """设置大纲输入值
+
+        Args:
+            key: 输入项键名
+            value: 输入值
+        """
+        if 'OUTLINE_INPUTS' not in self.config:
+            self.config['OUTLINE_INPUTS'] = {}
+
+        self.config['OUTLINE_INPUTS'][key] = str(value)
+        self.save_config()
 
     def save_config(self):
         """保存配置到文件"""

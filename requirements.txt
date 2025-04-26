@@ -1,9 +1,8 @@
-# 必须使用 Python 3.9 或更高版本！google-genai 库要求 Python 3.9+
 PyQt6
 aiohttp
 openai
 anthropic
-google-genai  # 仅支持 Python 3.9 或更高版本，这是 Google 官方要求
+google-genai
 configparser
 requests
 tqdm

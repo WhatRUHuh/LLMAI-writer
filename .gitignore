@@ -2,7 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+venv
+build
+dist
+main.spec
 # 忽略1文件夹下的所有内容
 1/**
 
