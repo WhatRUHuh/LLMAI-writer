@@ -10,6 +10,7 @@ memory-bank/**
 *.json
 *.ainovel
 config.ini
+AGENTS.md
 config copy.ini
 !config.example.ini
 !requirements.txt
@@ -28,15 +29,4 @@ CLAUDE.md
 # 日志文件
 *.log
 
-# Docker相关
-# 不排除Docker文件，但排除Docker生成的临时文件
-.docker/
-docker-compose.override.yml
-
-# 确保保留以下文件
-!Dockerfile
-!docker-compose.yml
-!.dockerignore
-!run_docker.sh
-!run_docker.bat
-!README.docker.md
+# （说明）本项目不再使用容器化脚本与配置
