@@ -4,9 +4,9 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QTextEdit, QPushButton, QComboBox, QGroupBox, QFormLayout,
     QMessageBox, QSplitter, QDialog, QListWidget, QListWidgetItem,
-    QTabWidget, QInputDialog, QScrollArea, QMenu
+    QTabWidget, QInputDialog, QScrollArea, QMenu, QCheckBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
 from PyQt6.QtGui import QAction, QCursor
 
 # 使用通用组件
@@ -24,6 +24,23 @@ class ChapterOutlineTab(QWidget):
         self.outline = None
         self.current_volume_index = -1
         self.current_chapter_index = -1
+        
+        # 标记是否有未保存的修改
+        self.has_unsaved_changes = False
+        # 记录原始内容，用于检测修改
+        self.original_volume_title = ""
+        self.original_volume_intro = ""
+        self.original_chapter_title = ""
+        self.original_chapter_summary = ""
+        
+        # 防止无限循环的标记
+        self._updating_from_external = False
+        
+        # 延迟保存定时器（用于自动保存）
+        self.auto_save_timer = QTimer()
+        self.auto_save_timer.setSingleShot(True)  # 只触发一次
+        self.auto_save_timer.timeout.connect(self._delayed_auto_save)
+        self.auto_save_delay = 5000  # 5秒延迟，给用户更多思考时间
 
         # 初始化UI
         self._init_ui()
@@ -121,6 +138,8 @@ class ChapterOutlineTab(QWidget):
         volume_title_layout.addWidget(QLabel("卷标题:"))
 
         self.volume_title_edit = QLineEdit()
+        self.volume_title_edit.textChanged.connect(self._on_content_changed)
+        self.volume_title_edit.editingFinished.connect(self._on_editing_finished)
         volume_title_layout.addWidget(self.volume_title_edit)
 
         self.volume_title_ai_button = QPushButton("AI生成")
@@ -134,6 +153,9 @@ class ChapterOutlineTab(QWidget):
 
         self.volume_intro_edit = QTextEdit()
         self.volume_intro_edit.setMinimumHeight(100)
+        self.volume_intro_edit.textChanged.connect(self._on_content_changed)
+        # QTextEdit没有editingFinished信号，使用focusOutEvent
+        self.volume_intro_edit.focusOutEvent = self._create_focus_out_handler(self.volume_intro_edit.focusOutEvent)
         volume_edit_layout.addWidget(self.volume_intro_edit)
 
         volume_intro_button_layout = QHBoxLayout()
@@ -157,6 +179,8 @@ class ChapterOutlineTab(QWidget):
         chapter_title_layout.addWidget(QLabel("章节标题:"))
 
         self.chapter_title_edit = QLineEdit()
+        self.chapter_title_edit.textChanged.connect(self._on_content_changed)
+        self.chapter_title_edit.editingFinished.connect(self._on_editing_finished)
         chapter_title_layout.addWidget(self.chapter_title_edit)
 
         self.chapter_title_ai_button = QPushButton("AI生成")
@@ -170,6 +194,9 @@ class ChapterOutlineTab(QWidget):
 
         self.chapter_summary_edit = QTextEdit()
         self.chapter_summary_edit.setMinimumHeight(150)
+        self.chapter_summary_edit.textChanged.connect(self._on_content_changed)
+        # QTextEdit没有editingFinished信号，使用focusOutEvent
+        self.chapter_summary_edit.focusOutEvent = self._create_focus_out_handler(self.chapter_summary_edit.focusOutEvent)
         chapter_edit_layout.addWidget(self.chapter_summary_edit)
 
         chapter_summary_button_layout = QHBoxLayout()
@@ -189,8 +216,15 @@ class ChapterOutlineTab(QWidget):
         self.chapter_edit_group.setLayout(chapter_edit_layout)
         right_layout.addWidget(self.chapter_edit_group)
 
-        # 保存按钮
+        # 保存按钮和自动保存选项
         save_layout = QHBoxLayout()
+        
+        # 自动保存复选框
+        self.auto_save_checkbox = QCheckBox("自动保存")
+        self.auto_save_checkbox.setToolTip("启用后，修改内容时会自动保存，无需手动点击保存按钮")
+        self.auto_save_checkbox.setChecked(True)  # 默认启用自动保存
+        save_layout.addWidget(self.auto_save_checkbox)
+        
         save_layout.addStretch()
 
         self.save_button = QPushButton("保存修改")
@@ -225,9 +259,20 @@ class ChapterOutlineTab(QWidget):
         for i, volume in enumerate(volumes):
             title = volume.get("title", f"第{i+1}卷")
             self.volume_list.addItem(title)
+        
+        # 重置修改状态
+        self.has_unsaved_changes = False
+        self.save_button.setText("保存修改")
+        self._update_original_content()
 
     def _on_volume_selected(self, index):
         """卷选择事件"""
+        # 如果点击的是当前卷，直接返回
+        if index == self.current_volume_index:
+            return
+        
+        # 选择切换时不需要立即保存，交给失去焦点或延迟保存处理
+        
         self.current_volume_index = index
         self.current_chapter_index = -1
 
@@ -249,6 +294,7 @@ class ChapterOutlineTab(QWidget):
 
         # 加载卷信息
         volumes = self.outline.get("volumes", [])
+        
         if index < len(volumes):
             volume = volumes[index]
             self.volume_title_edit.setText(volume.get("title", f"第{index+1}卷"))
@@ -257,12 +303,22 @@ class ChapterOutlineTab(QWidget):
 
             # 加载章节列表
             chapters = volume.get("chapters", [])
+            
             for i, chapter in enumerate(chapters):
                 title = chapter.get("title", f"第{i+1}章")
                 self.chapter_list.addItem(title)
+        
+        # 更新原始内容记录
+        self._update_original_content()
 
     def _on_chapter_selected(self, index):
         """章节选择事件"""
+        # 如果点击的是当前章节，直接返回
+        if index == self.current_chapter_index:
+            return
+        
+        # 选择切换时不需要立即保存，交给失去焦点或延迟保存处理
+        
         self.current_chapter_index = index
 
         if index < 0:
@@ -275,13 +331,21 @@ class ChapterOutlineTab(QWidget):
 
         # 加载章节信息
         volumes = self.outline.get("volumes", [])
+        
         if self.current_volume_index < len(volumes):
             volume = volumes[self.current_volume_index]
             chapters = volume.get("chapters", [])
+            
             if index < len(chapters):
                 chapter = chapters[index]
-                self.chapter_title_edit.setText(chapter.get("title", f"第{index+1}章"))
-                self.chapter_summary_edit.setPlainText(chapter.get("summary", ""))
+                title = chapter.get("title", f"第{index+1}章")
+                summary = chapter.get("summary", "")
+                
+                self.chapter_title_edit.setText(title)
+                self.chapter_summary_edit.setPlainText(summary)
+        
+        # 更新原始内容记录
+        self._update_original_content()
 
     def _add_volume(self):
         """添加卷"""
@@ -610,6 +674,13 @@ class ChapterOutlineTab(QWidget):
 
         # 保存大纲
         self.main_window.set_outline(self.outline)
+        
+        # 重置未保存修改标记
+        self.has_unsaved_changes = False
+        self.save_button.setText("保存修改")
+        
+        # 更新原始内容记录
+        self._update_original_content()
 
         if show_message:
             QMessageBox.information(self, "保存成功", "大纲修改已保存")
@@ -747,10 +818,252 @@ class ChapterOutlineTab(QWidget):
 
     def _get_available_models(self):
         """获取可用的模型列表"""
-        # 只返回标准模型，不显示具体的自定义模型
-        # 添加 SiliconFlow 到硬编码列表
-        return ["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"]
+        # 动态获取所有可用模型，包括自定义模型
+        if hasattr(self, 'main_window') and self.main_window:
+            return self.main_window.get_available_models()
+        else:
+            # fallback to hardcoded list if main_window is not available
+            return ["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"]
+
+    def _on_content_changed(self):
+        """内容发生变化时的处理"""
+        # 检查是否启用了自动保存
+        if self.auto_save_checkbox.isChecked():
+            # 延迟自动保存：重启定时器
+            self.auto_save_timer.stop()  # 停止之前的定时器
+            self.auto_save_timer.start(self.auto_save_delay)  # 开始新的延迟
+        else:
+            # 标记有未保存的修改
+            self.has_unsaved_changes = True
+            # 更新保存按钮文本以提示用户
+            if self.has_unsaved_changes:
+                self.save_button.setText("保存修改 *")
+            else:
+                self.save_button.setText("保存修改")
+    
+    def _delayed_auto_save(self):
+        """延迟自动保存（定时器触发）"""
+        if (self.auto_save_checkbox.isChecked() and 
+            not self._updating_from_external):
+            print("DEBUG: Performing delayed auto save")
+            self._save_current_edits_silent()
+    
+    def _on_editing_finished(self):
+        """编辑完成时的处理（适用于QLineEdit）"""
+        if (self.auto_save_checkbox.isChecked() and 
+            not self._updating_from_external):
+            # 停止定时器，立即保存
+            self.auto_save_timer.stop()
+            print("DEBUG: Performing immediate auto save (editing finished)")
+            self._save_current_edits_silent()
+    
+    def _create_focus_out_handler(self, original_handler):
+        """创建失去焦点事件处理器（适用于QTextEdit）"""
+        def focus_out_event(event):
+            # 先调用原始的焦点事件处理
+            original_handler(event)
+            # 然后处理自动保存
+            if (self.auto_save_checkbox.isChecked() and 
+                not self._updating_from_external):
+                # 停止定时器，立即保存
+                self.auto_save_timer.stop()
+                print("DEBUG: Performing immediate auto save (focus out)")
+                self._save_current_edits_silent()
+        return focus_out_event
+    
+    def _save_current_edits_silent(self):
+        """静默保存当前编辑的内容（不显示提示框）"""
+        if not self.outline:
+            return
+        
+        # 记住当前焦点控件
+        focused_widget = self.focusWidget()
+        
+        print(f"DEBUG: _save_current_edits_silent called, volume_index={self.current_volume_index}, chapter_index={self.current_chapter_index}")
+        
+        # 保存当前编辑的卷和章节
+        if self.current_volume_index >= 0:
+            volumes = self.outline.get("volumes", [])
+            if self.current_volume_index < len(volumes):
+                volume = volumes[self.current_volume_index]
+                volume["title"] = self.volume_title_edit.text()
+                volume["description"] = self.volume_intro_edit.toPlainText()
+                
+                if self.current_chapter_index >= 0:
+                    chapters = volume.get("chapters", [])
+                    if self.current_chapter_index < len(chapters):
+                        chapter = chapters[self.current_chapter_index]
+                        chapter["title"] = self.chapter_title_edit.text()
+                        chapter["summary"] = self.chapter_summary_edit.toPlainText()
+        
+        # 设置标记，防止 update_outline 被触发
+        self._updating_from_external = True
+        
+        try:
+            # 保存到主窗口 - 这里可能会触发其他组件的更新
+            print("DEBUG: About to call main_window.set_outline")
+            self.main_window.set_outline(self.outline)
+            print("DEBUG: main_window.set_outline completed")
+            
+            self.has_unsaved_changes = False
+            self.save_button.setText("保存修改")
+            
+            # 更新原始内容记录
+            self._update_original_content()
+            
+        finally:
+            # 清除标记
+            self._updating_from_external = False
+            
+            # 尝试恢复焦点
+            if (focused_widget and focused_widget in [self.volume_title_edit, self.volume_intro_edit, 
+                                                     self.chapter_title_edit, self.chapter_summary_edit]):
+                print(f"DEBUG: Restoring focus to {focused_widget}")
+                focused_widget.setFocus()
+    
+    def _update_original_content(self):
+        """更新原始内容记录"""
+        self.original_volume_title = self.volume_title_edit.text() if hasattr(self, 'volume_title_edit') else ""
+        self.original_volume_intro = self.volume_intro_edit.toPlainText() if hasattr(self, 'volume_intro_edit') else ""
+        self.original_chapter_title = self.chapter_title_edit.text() if hasattr(self, 'chapter_title_edit') else ""
+        self.original_chapter_summary = self.chapter_summary_edit.toPlainText() if hasattr(self, 'chapter_summary_edit') else ""
+    
+    def _has_unsaved_changes(self):
+        """检查是否有未保存的修改"""
+        if not hasattr(self, 'auto_save_checkbox') or self.auto_save_checkbox.isChecked():
+            # 如果启用了自动保存，则认为没有未保存的修改
+            return False
+        
+        # 检查当前内容是否与原始内容不同
+        return (
+            (hasattr(self, 'volume_title_edit') and self.volume_title_edit.text() != self.original_volume_title) or
+            (hasattr(self, 'volume_intro_edit') and self.volume_intro_edit.toPlainText() != self.original_volume_intro) or
+            (hasattr(self, 'chapter_title_edit') and self.chapter_title_edit.text() != self.original_chapter_title) or
+            (hasattr(self, 'chapter_summary_edit') and self.chapter_summary_edit.toPlainText() != self.original_chapter_summary)
+        )
+    
+    def _prompt_save_changes(self):
+        """提示用户是否保存修改"""
+        if not self._has_unsaved_changes():
+            return True  # 没有修改，直接返回True
+        
+        reply = QMessageBox.question(
+            self, 
+            "保存修改",
+            "当前内容已修改但未保存，是否要保存这些修改？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # 用户选择保存
+            self._save_current_edits_silent()
+            return True
+        elif reply == QMessageBox.StandardButton.No:
+            # 用户选择不保存
+            return True
+        else:
+            # 用户选择取消
+            return False
 
     def update_outline(self):
         """更新大纲（供外部调用）"""
-        self._load_outline()
+        print("DEBUG: update_outline called from external")
+        
+        # 防止无限循环：如果当前正在外部更新，直接返回
+        if self._updating_from_external:
+            print("DEBUG: Already updating from external, skipping")
+            return
+            
+        print(f"DEBUG: Current state before update - volume_index={self.current_volume_index}, chapter_index={self.current_chapter_index}")
+        
+        # 设置标记，防止循环更新
+        self._updating_from_external = True
+        
+        try:
+            # 记录当前选择状态
+            old_volume_index = self.current_volume_index
+            old_chapter_index = self.current_chapter_index
+            
+            self._load_outline()
+            
+            # 尝试恢复选择状态（不触发自动保存）
+            if old_volume_index >= 0 and old_volume_index < self.volume_list.count():
+                print(f"DEBUG: Restoring volume selection to {old_volume_index}")
+                self.volume_list.blockSignals(True)
+                self.volume_list.setCurrentRow(old_volume_index)
+                self.volume_list.blockSignals(False)
+                # 直接设置状态，不调用事件处理器
+                self._restore_volume_state(old_volume_index)
+                
+                if old_chapter_index >= 0 and old_chapter_index < self.chapter_list.count():
+                    print(f"DEBUG: Restoring chapter selection to {old_chapter_index}")
+                    self.chapter_list.blockSignals(True)
+                    self.chapter_list.setCurrentRow(old_chapter_index)
+                    self.chapter_list.blockSignals(False)
+                    # 直接设置状态，不调用事件处理器
+                    self._restore_chapter_state(old_chapter_index)
+        finally:
+            # 确保清除标记
+            self._updating_from_external = False
+    
+    def _restore_volume_state(self, volume_index):
+        """恢复卷状态（不触发保存）"""
+        self.current_volume_index = volume_index
+        self.current_chapter_index = -1
+
+        # 清空章节列表
+        self.chapter_list.clear()
+
+        # 禁用章节编辑区域
+        self.chapter_edit_group.setEnabled(False)
+
+        if volume_index < 0:
+            # 禁用卷编辑区域
+            self.volume_edit_group.setEnabled(False)
+            self.add_chapter_button.setEnabled(False)
+            return
+
+        # 启用卷编辑区域和添加章节按钮
+        self.volume_edit_group.setEnabled(True)
+        self.add_chapter_button.setEnabled(True)
+
+        # 加载卷信息
+        volumes = self.outline.get("volumes", [])
+        if volume_index < len(volumes):
+            volume = volumes[volume_index]
+            self.volume_title_edit.setText(volume.get("title", f"第{volume_index+1}卷"))
+            self.volume_intro_edit.setPlainText(volume.get("description", ""))
+
+            # 加载章节列表
+            chapters = volume.get("chapters", [])
+            for i, chapter in enumerate(chapters):
+                title = chapter.get("title", f"第{i+1}章")
+                self.chapter_list.addItem(title)
+        
+        # 更新原始内容记录
+        self._update_original_content()
+    
+    def _restore_chapter_state(self, chapter_index):
+        """恢复章节状态（不触发保存）"""
+        self.current_chapter_index = chapter_index
+
+        if chapter_index < 0:
+            # 禁用章节编辑区域
+            self.chapter_edit_group.setEnabled(False)
+            return
+
+        # 启用章节编辑区域
+        self.chapter_edit_group.setEnabled(True)
+
+        # 加载章节信息
+        volumes = self.outline.get("volumes", [])
+        if self.current_volume_index < len(volumes):
+            volume = volumes[self.current_volume_index]
+            chapters = volume.get("chapters", [])
+            if chapter_index < len(chapters):
+                chapter = chapters[chapter_index]
+                self.chapter_title_edit.setText(chapter.get("title", f"第{chapter_index+1}章"))
+                self.chapter_summary_edit.setPlainText(chapter.get("summary", ""))
+        
+        # 更新原始内容记录
+        self._update_original_content()

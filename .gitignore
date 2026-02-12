@@ -24,6 +24,7 @@ config copy.ini
 .idea/
 *.swp
 *.swo
+CLAUDE.md
 
 # 日志文件
 *.log

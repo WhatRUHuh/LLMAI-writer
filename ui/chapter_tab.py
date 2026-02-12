@@ -436,8 +436,8 @@ class ChapterTab(QWidget):
             "AI生成章节内容",
             "章节内容",
             current_text,
-            # 添加 SiliconFlow 到硬编码列表
-            models=["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"],
+            # 动态获取可用的模型列表
+            models=self.main_window.get_available_models(),
             # default_model="GPT", # 不再需要传递默认模型，让对话框自己处理
             outline_info=outline_info,
             context_info=context_info,
@@ -536,7 +536,7 @@ class ChapterTab(QWidget):
             "AI文本润色",
             "润色结果",
             "", # 初始文本为空，因为我们要在prompt里提供上下文
-            models=["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"], # 保持模型列表一致
+            models=self.main_window.get_available_models(), # 动态获取可用的模型列表
             # default_model="GPT", # 不再需要传递默认模型
             outline_info=outline_info,
             context_info=context_info,

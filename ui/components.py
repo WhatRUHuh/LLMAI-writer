@@ -824,26 +824,27 @@ class AIGenerateDialog(QDialog):
             return
 
         # 获取模型
-        model_text = self.model_combo.currentText().lower()
+        model_text = self.model_combo.currentText()
+        model_text_lower = model_text.lower()
+        
         # 转换为模型类型
-        if model_text == "gpt":
+        if model_text_lower == "gpt":
             model_type = "gpt"
-        elif model_text == "claude":
+        elif model_text_lower == "claude":
             model_type = "claude"
-        elif model_text == "gemini":
+        elif model_text_lower == "gemini":
             model_type = "gemini"
-        elif model_text == "自定义openai":
+        elif model_text_lower == "自定义openai":
             model_type = "custom_openai"
-        elif model_text == "modelscope":
+        elif model_text_lower == "modelscope":
             model_type = "modelscope"
-        elif model_text == "ollama": # 添加对Ollama的判断
+        elif model_text_lower == "ollama":
             model_type = "ollama"
-        elif model_text == "siliconflow": # 添加对SiliconFlow的判断
+        elif model_text_lower == "siliconflow":
             model_type = "siliconflow"
         else:
-            # 如果下拉框里出现了这里没有处理的选项，显示错误
-            QMessageBox.warning(self, "错误", f"无法识别的模型类型: {self.model_combo.currentText()}")
-            return # 不继续执行生成
+            # 检查是否是自定义模型，自定义模型直接使用模型名称作为类型
+            model_type = model_text
         try:
             # 尝试不同的方式获取main_window
             if hasattr(self.parent(), 'main_window'):
@@ -856,6 +857,9 @@ class AIGenerateDialog(QDialog):
                 return
 
             model = main_window.get_model(model_type)
+            # 保存用户选择的模型
+            if self.config_manager:
+                self.config_manager.save_last_selected_model(model_text)
         except Exception as e:
             QMessageBox.warning(self, "错误", f"获取模型失败: {str(e)}")
             return

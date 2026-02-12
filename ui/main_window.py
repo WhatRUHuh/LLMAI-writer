@@ -65,11 +65,11 @@ class MainWindow(QMainWindow):
         # 加载字体
         self._load_font()
 
+        # 初始化AI模型（必须在UI初始化之前，因为UI需要访问模型信息）
+        self._init_models()
+
         # 初始化UI
         self._init_ui()
-
-        # 初始化AI模型
-        self._init_models()
 
         # 初始化 Embedding 模型 (需要放在模型初始化之后，因为它可能依赖模型配置)
         self._init_embedding_model()
@@ -258,6 +258,32 @@ class MainWindow(QMainWindow):
             # 如果模型类型字符串本身就不认识
              raise ValueError(f"未知的模型类型: {model_type}")
 
+    def get_available_models(self):
+        """获取所有可用的模型列表（包括自定义模型）"""
+        models = []
+        
+        # 添加标准模型
+        if self.has_gpt:
+            models.append("GPT")
+        if self.has_claude:
+            models.append("Claude") 
+        if self.has_gemini:
+            models.append("Gemini")
+        if self.has_custom_openai:
+            models.append("自定义OpenAI")
+        if self.has_modelscope:
+            models.append("ModelScope")
+        if self.has_ollama:
+            models.append("Ollama")
+        if self.has_siliconflow:
+            models.append("SiliconFlow")
+            
+        # 添加多个自定义模型
+        if self.custom_openai_models:
+            models.extend(list(self.custom_openai_models.keys()))
+            
+        return models
+
     def _init_embedding_model(self):
         """初始化 Embedding 模型"""
         # 优先使用 SiliconFlow Embedding，如果配置了的话
@@ -302,15 +328,13 @@ class MainWindow(QMainWindow):
 
     def get_available_knowledge_bases(self):
         """获取可用的知识库列表"""
-        manager = self.get_knowledge_base_manager()
-        if manager:
+        if self.knowledge_base_manager:
             try:
-                return manager.list_knowledge_bases()
+                return self.knowledge_base_manager.list_knowledge_bases()
             except Exception as e:
-                print(f"获取知识库列表时出错: {e}")
-                # 出错时返回空列表，避免后续代码出错
+                print(f"获取知识库列表失败: {e}")
                 return []
-        return [] # 如果管理器不存在，也返回空列表
+        return []
 
     def _create_toolbar(self):
         """创建工具栏"""
@@ -333,9 +357,14 @@ class MainWindow(QMainWindow):
 
         save_action = QAction(get_save_icon(), "保存", self)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
-        save_action.triggered.connect(self.save_novel)
+        save_action.triggered.connect(self.save_novel_quick)
         save_action.setProperty("primary", True)  # 设置为主要按钮
         toolbar.addAction(save_action)
+
+        save_as_action = QAction(get_save_icon(), "另存为", self) 
+        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        save_as_action.triggered.connect(self.save_novel)
+        toolbar.addAction(save_as_action)
 
         toolbar.addSeparator()
 
@@ -546,8 +575,36 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"自动保存人物关系数据时出错: {e}")
 
+    def save_novel_quick(self):
+        """快速保存小说 (Ctrl+S)"""
+        # 检查是否有大纲
+        if not self.data_manager.get_outline():
+            QMessageBox.warning(self, "保存失败", "没有可保存的大纲数据")
+            return
+
+        # 检查是否已有保存路径
+        current_file = self.data_manager.current_file
+        
+        if current_file:
+            # 直接保存到当前文件
+            self.progress_indicator.start()
+            self.status_bar_manager.show_message("正在保存小说...")
+            
+            success = self.data_manager.save_to_file(current_file)
+            
+            self.progress_indicator.stop()
+            
+            if success:
+                self.status_bar_manager.show_message(f"小说已保存")
+            else:
+                self.status_bar_manager.show_message("保存失败")
+                QMessageBox.warning(self, "保存失败", "保存小说时出错")
+        else:
+            # 没有当前文件，调用另存为
+            self.save_novel()
+
     def save_novel(self):
-        """保存小说"""
+        """另存为小说 (Ctrl+Shift+S)"""
         # 显示进度指示器
         self.progress_indicator.start()
         self.status_bar_manager.show_message("正在保存小说...")
@@ -559,7 +616,7 @@ class MainWindow(QMainWindow):
             return
 
         # 选择保存文件
-        filepath, _ = QFileDialog.getSaveFileName(self, "保存小说", "", "AI小说文件 (*.ainovel)")
+        filepath, _ = QFileDialog.getSaveFileName(self, "另存为小说", "", "AI小说文件 (*.ainovel)")
         if not filepath:
             self.progress_indicator.stop()
             return
@@ -575,6 +632,7 @@ class MainWindow(QMainWindow):
         self.progress_indicator.stop()
 
         if success:
+            # current_file is already set by save_to_file method
             self.status_bar_manager.show_message(f"小说已保存到: {filepath}")
             QMessageBox.information(self, "保存成功", f"小说已保存到: {filepath}")
         else:

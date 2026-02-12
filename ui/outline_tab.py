@@ -59,8 +59,14 @@ class OutlineTab(QWidget):
         model_layout = QFormLayout()
 
         self.model_combo = QComboBox()
-        # 只添加标准模型，不显示具体的自定义模型
-        self.model_combo.addItems(["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"]) # 直接添加到硬编码列表
+        # 动态获取可用的模型列表
+        if hasattr(self, 'main_window') and self.main_window:
+            available_models = self.main_window.get_available_models()
+        else:
+            # fallback to hardcoded list if main_window is not available
+            available_models = ["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"]
+        
+        self.model_combo.addItems(available_models)
 
         # 初始化模型选择
         # 初始化模型选择
@@ -339,23 +345,28 @@ class OutlineTab(QWidget):
 
     def _get_model_type(self):
         """获取选择的模型类型"""
-        model_text = self.model_combo.currentText().lower()
-        if model_text == "gpt":
+        model_text = self.model_combo.currentText()
+        model_text_lower = model_text.lower()
+        
+        if model_text_lower == "gpt":
             return "gpt"
-        elif model_text == "claude":
+        elif model_text_lower == "claude":
             return "claude"
-        elif model_text == "gemini":
+        elif model_text_lower == "gemini":
             return "gemini"
-        elif model_text == "自定义openai":
+        elif model_text_lower == "自定义openai":
             return "custom_openai"
-        elif model_text == "modelscope":
+        elif model_text_lower == "modelscope":
             return "modelscope"
-        elif model_text == "ollama":
+        elif model_text_lower == "ollama":
             return "ollama"
-        elif model_text == "siliconflow": # 添加 SiliconFlow 处理
+        elif model_text_lower == "siliconflow":
             return "siliconflow"
         else:
-            return "gpt"  # 默认使用GPT # 保持原来的默认逻辑
+            # 检查是否是自定义模型
+            if hasattr(self, 'main_window') and self.main_window and model_text in self.main_window.custom_openai_models:
+                return model_text  # 自定义模型直接返回模型名称
+            return "gpt"  # 默认使用GPT
 
     def _update_buttons(self, has_outline):
         """更新按钮状态"""

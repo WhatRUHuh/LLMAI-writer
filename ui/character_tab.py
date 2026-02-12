@@ -180,8 +180,13 @@ class CharacterTab(QWidget):
         ai_button_layout.addWidget(self.generate_button)
 
         self.model_combo = QComboBox()
-        # 添加 SiliconFlow 到硬编码列表
-        self.model_combo.addItems(["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"])
+        # 动态获取可用的模型列表
+        if hasattr(self, 'main_window') and self.main_window:
+            available_models = self.main_window.get_available_models()
+        else:
+            # fallback to hardcoded list if main_window is not available
+            available_models = ["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"]
+        self.model_combo.addItems(available_models)
         ai_button_layout.addWidget(self.model_combo)
 
         character_layout.addLayout(ai_button_layout)

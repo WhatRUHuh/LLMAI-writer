@@ -468,9 +468,12 @@ class ChapterAnalysisTab(QWidget):
 
     def _get_available_models(self):
         """获取可用的模型列表"""
-        # 只返回标准模型，不显示具体的自定义模型
-        # 添加 SiliconFlow 到硬编码列表
-        return ["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"]
+        # 动态获取所有可用模型，包括自定义模型
+        if hasattr(self, 'main_window') and self.main_window:
+            return self.main_window.get_available_models()
+        else:
+            # fallback to hardcoded list if main_window is not available
+            return ["GPT", "Claude", "Gemini", "自定义OpenAI", "ModelScope", "Ollama", "SiliconFlow"]
 
     def _extract_section(self, text, section_title, *other_titles):
         """从文本中提取特定部分"""
